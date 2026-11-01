@@ -1,0 +1,28 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# SQLite databases contain accounts, rides, and uploaded driver documents
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Local logs and operating-system metadata
+*.log
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
