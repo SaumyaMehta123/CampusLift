@@ -26,3 +26,22 @@ Create an admin locally with `python server.py --create-admin` and visit `/#admi
 ## Public deployment boundary
 
 Do not expose the classroom server directly to the public internet. Before a college pilot, use HTTPS and secure cookies, add login-abuse controls, secure document verification and retention, approved support/safety/payment workflows, privacy policies, and institutional approval. Restrict Google keys by API and application origin/IP as described in README.md.
+
+## Controlled private beta on Render
+
+For a small, access-restricted beta, deploy one Render Web Service from the reviewed GitHub source. The server uses Render's `PORT` when set and binds to `0.0.0.0`; local development still defaults to `127.0.0.1:8765`. Set the Render start command to:
+
+```sh
+python server.py --host 0.0.0.0 --port "$PORT" --db-path /var/data/quickride.db
+```
+
+Attach a persistent disk mounted at `/var/data`. The database filename remains `quickride.db`; the app creates its parent directory if needed. Do not copy the local production database into the cloud automatically. Decide separately whether the beta should start with an intentionally prepared database or an empty one. Keep this SQLite deployment to one running service instance.
+
+Set these environment variables in Render, not in a committed `.env` file:
+
+- `CAMPUSLIFT_PIN_SECRET`: a strong, random deployment-only secret.
+- `QUICKRIDE_COOKIE_SECURE=true`: enables Secure on user and admin session cookies over HTTPS.
+- `GOOGLE_MAPS_API_KEY` and `GOOGLE_MAPS_EMBED_API_KEY`: optional; configure only if the related Maps features are enabled, with the restrictions described above.
+- `CAMPUS_UTC_OFFSET_MINUTES` and `CAMPUS_EMAIL_DOMAINS`: optional campus configuration.
+
+Render supplies `PORT`. Restrict beta access using the hosting platform or an approved access layer before sharing the URL. The app's static handler serves only `index.html`, `app.js`, `styles.css`, `quickride-colors.css` and `product-config.js`; API and authorized admin document routes remain handled by the application. `/api/health` is a liveness check and does not verify database readiness.

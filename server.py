@@ -7,6 +7,8 @@ from urllib.parse import urlparse, parse_qs, quote, urlencode
 import argparse, base64, getpass, hashlib, hmac, json, math, os, re, secrets, sqlite3, urllib.error, urllib.request
 
 ROOT = Path(__file__).resolve().parent
+STATIC_ASSETS = frozenset(("/", "/index.html", "/app.js", "/styles.css",
+                          "/quickride-colors.css", "/product-config.js"))
 MAX_BODY = 16_384
 MAX_DRIVER_UPLOAD_BYTES = 5 * 1024 * 1024
 MAX_DRIVER_APPLICATION_BODY = 14 * 1024 * 1024
@@ -287,7 +289,7 @@ class QuickRideHandler(SimpleHTTPRequestHandler):
         con.execute("DELETE FROM admin_sessions WHERE expires_at<=?", (now(),))
         con.execute("INSERT INTO admin_sessions(token_hash,admin_id,created_at,expires_at) VALUES(?,?,?,?)",
             (hashlib.sha256(token.encode()).hexdigest(), admin_id, now(), expires))
-        secure = "; Secure" if os.environ.get("QUICKRIDE_COOKIE_SECURE", "").lower() in ("1", "true", "yes") else ""
+        secure = "; Secure" if os.environ.get("QUICKRIDE_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes") else ""
         return f"campuslift_admin_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400{secure}"
 
     def require_user(self, con, role=None):
@@ -301,7 +303,7 @@ class QuickRideHandler(SimpleHTTPRequestHandler):
         return user
 
     def session_cookie(self, token, expires):
-        secure = "; Secure" if os.environ.get("QUICKRIDE_COOKIE_SECURE", "").lower() in ("1", "true", "yes") else ""
+        secure = "; Secure" if os.environ.get("QUICKRIDE_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes") else ""
         return f"{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_DAYS*86400}{secure}"
 
     def make_session(self, con, user_id):
@@ -407,9 +409,10 @@ class QuickRideHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         if not path.startswith("/api/"):
-            static_path = Path(self.translate_path(self.path)).resolve()
-            if static_path.suffix.lower() in (".db", ".sqlite", ".sqlite3") or static_path.name.lower().endswith(("-wal", "-shm")):
+            if path not in STATIC_ASSETS:
                 return self.send_error(404)
+            if path == "/":
+                self.path = "/index.html"
             return super().do_GET()
         if path == "/api/config":
             vehicles = {key: {"label": val["label"], "icon": val["icon"]} for key, val in VEHICLES.items()}
@@ -585,6 +588,14 @@ class QuickRideHandler(SimpleHTTPRequestHandler):
                     return self.send_json(404, {"error": "Ride not found"})
                 return self.send_json(200, {"ride": self.ride(con, row)})
         return self.send_json(404, {"error": "Endpoint not found"})
+
+    def do_HEAD(self):
+        path = urlparse(self.path).path
+        if path not in STATIC_ASSETS:
+            return self.send_error(404)
+        if path == "/":
+            self.path = "/index.html"
+        return super().do_HEAD()
 
     def do_POST(self):
         path = urlparse(self.path).path
@@ -978,8 +989,18 @@ def create_admin_account(db_path):
 
 def main():
     parser = argparse.ArgumentParser(description="CampusLift campus ride service")
-    parser.add_argument("--host", default="127.0.0.1", help="Use 0.0.0.0 for same-Wi-Fi access")
-    parser.add_argument("--port", type=int, default=8765)
+    env_port = os.environ.get("PORT", "").strip()
+    if env_port:
+        try:
+            default_port = int(env_port)
+        except ValueError:
+            parser.error("PORT must be an integer")
+        if not 1 <= default_port <= 65535:
+            parser.error("PORT must be between 1 and 65535")
+    else:
+        default_port = 8765
+    parser.add_argument("--host", default="0.0.0.0" if env_port else "127.0.0.1", help="Bind address (cloud deployments should use 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=default_port)
     parser.add_argument("--db-path", default=str(ROOT / "quickride.db"))
     parser.add_argument("--create-demo-accounts", action="store_true", help="Create demo accounts and print generated passwords once")
     parser.add_argument("--create-admin", action="store_true", help="Interactively create an admin account for verification review")
