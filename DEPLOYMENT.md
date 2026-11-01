@@ -41,6 +41,7 @@ Set these environment variables in Render, not in a committed `.env` file:
 
 - `CAMPUSLIFT_PIN_SECRET`: a strong, random deployment-only secret.
 - `QUICKRIDE_COOKIE_SECURE=true`: enables Secure on user and admin session cookies over HTTPS.
+- `CAMPUSLIFT_ADMIN_EMAIL`, `CAMPUSLIFT_ADMIN_NAME`, and `CAMPUSLIFT_ADMIN_PASSWORD`: optional temporary admin recovery/provisioning variables. When the password variable is set, startup creates the admin if absent or updates only that existing admin's name and password hash. After successfully logging in, remove `CAMPUSLIFT_ADMIN_PASSWORD` from Render so later restarts do not reapply it; the email and name variables may also be removed.
 - `GOOGLE_MAPS_API_KEY` and `GOOGLE_MAPS_EMBED_API_KEY`: optional; configure only if the related Maps features are enabled, with the restrictions described above.
 - `CAMPUS_UTC_OFFSET_MINUTES` and `CAMPUS_EMAIL_DOMAINS`: optional campus configuration.
 

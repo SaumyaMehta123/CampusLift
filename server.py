@@ -987,6 +987,32 @@ def create_admin_account(db_path):
     print("Admin account created. Keep its password private.")
 
 
+def provision_admin_from_environment(db_path):
+    password = os.environ.get("CAMPUSLIFT_ADMIN_PASSWORD")
+    if password is None:
+        return
+
+    email = os.environ.get("CAMPUSLIFT_ADMIN_EMAIL", "").strip().lower()
+    name = os.environ.get("CAMPUSLIFT_ADMIN_NAME", "").strip()
+    if not email or not name:
+        raise SystemExit("Set CAMPUSLIFT_ADMIN_EMAIL, CAMPUSLIFT_ADMIN_NAME, and CAMPUSLIFT_ADMIN_PASSWORD to provision an admin.")
+    if len(name) < 2 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise SystemExit("Enter a valid admin name and email.")
+    if len(password) < 10:
+        raise SystemExit("CAMPUSLIFT_ADMIN_PASSWORD must contain at least 10 characters.")
+
+    encoded_password = password_hash(password)
+    with sqlite3.connect(db_path, timeout=20) as con:
+        con.execute("BEGIN IMMEDIATE")
+        existing = con.execute("SELECT id FROM admins WHERE email=?", (email,)).fetchone()
+        if existing:
+            con.execute("UPDATE admins SET name=?,password_hash=? WHERE id=?",
+                        (name, encoded_password, existing[0]))
+        else:
+            con.execute("INSERT INTO admins(name,email,password_hash,created_at) VALUES(?,?,?,?)",
+                        (name, email, encoded_password, now()))
+
+
 def main():
     parser = argparse.ArgumentParser(description="CampusLift campus ride service")
     env_port = os.environ.get("PORT", "").strip()
@@ -1013,6 +1039,7 @@ def main():
     if args.create_admin:
         create_admin_account(db_path)
         return
+    provision_admin_from_environment(db_path)
     handler = lambda *a, **kw: QuickRideHandler(*a, db_path=db_path, **kw)
     server = ThreadingHTTPServer((args.host, args.port), handler)
     print(f"CampusLift is running at http://{args.host}:{args.port}")
